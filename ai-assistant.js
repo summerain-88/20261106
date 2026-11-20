@@ -65,7 +65,10 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
   const model = aiSdk.getGenerativeModel(ai, {
     model: MODEL_NAME,
     systemInstruction: SYSTEM_INSTRUCTION,
-    generationConfig: { maxOutputTokens: 512 },
+    generationConfig: {
+      maxOutputTokens: 2048,
+      thinkingConfig: { thinkingLevel: aiSdk.ThinkingLevel.LOW }
+    },
     requestOptions: { timeout: 60000 }
   });
 
@@ -95,8 +98,18 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
           chat.sendMessage(prompt, { signal: controller.signal }),
           timeout
         ]);
+        const response = result.response;
+        const answer = response.text().trim();
+        if (!answer) {
+          const reason = response.candidates?.[0]?.finishReason
+            || response.promptFeedback?.blockReason
+            || 'no text candidate';
+          const error = new Error(`Gemini returned no text (reason: ${reason})`);
+          error.code = 'ai/empty-response';
+          throw error;
+        }
         turnCount += 1;
-        return result.response.text();
+        return answer;
       } catch (error) {
         chat = null;
         turnCount = 0;
