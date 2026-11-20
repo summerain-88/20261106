@@ -7,15 +7,15 @@
   <meta name="description" content="一眼掌握今日行程與待辦，讓生活安排更有餘裕。">
   <title>日常 — 個人行程與任務管理</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=event-time-row-2">
-  <script src="app.js?v=event-time-range" defer></script>
+  <link rel="stylesheet" href="styles.css?v=sidebar-encouragement">
+  <script src="app.js?v=sidebar-encouragement" defer></script>
 </head>
 <body>
   <section class="auth-screen" id="authScreen" aria-labelledby="authTitle"><div class="auth-card"><a class="brand auth-brand" href="#" aria-label="日常"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4.5" y="6" width="15" height="14" rx="3"/><path d="M8 4v4m8-4v4M5 10h14m-9 4 2 2 4-4"/></svg></span><span>日常<span class="brand-dot">.</span></span></a><span class="auth-eyebrow">YOUR PERSONAL SPACE</span><h1 id="authTitle">讓日常，從容一點。</h1><p id="authStatus">登入後可查看你的行程與待辦。</p><button class="button button-primary google-button" id="googleSignIn" type="button"><span class="google-g" aria-hidden="true">G</span>使用 Google 帳戶登入</button><p class="auth-error" id="authError" role="alert"></p><small class="auth-privacy">你的行程只會顯示在登入後的個人空間。</small></div></section>
   <div class="app-shell">
     <aside class="sidebar" aria-label="主要導覽">
       <a class="brand" href="#overview" aria-label="日常首頁"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4.5" y="6" width="15" height="14" rx="3"/><path d="M8 4v4m8-4v4M5 10h14m-9 4 2 2 4-4"/></svg></span><span>日常<span class="brand-dot">.</span></span></a>
-      <button class="workspace-button" type="button"><span class="avatar">林</span><span class="workspace-copy"><strong>我的生活</strong><small>個人空間</small></span><svg class="chevron" viewBox="0 0 20 20"><path d="m6 8 4 4 4-4"/></svg></button>
+      <div class="sidebar-encouragement" aria-live="polite"><span class="encouragement-mark" aria-hidden="true">✦</span><div class="encouragement-copy"><strong>今天的小提醒</strong><small id="encouragementMessage">一步一步，也是在前進。</small></div></div>
       <span class="nav-label">工作區</span>
       <nav class="main-nav">
         <a class="nav-item active" href="#overview" data-nav="overview"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="4" rx="2"/><rect x="13.5" y="11.5" width="7" height="9" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/></svg><span>今日總覽</span><span class="nav-count" id="navTodayCount">0</span></a>

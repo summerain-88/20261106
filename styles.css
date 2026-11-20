@@ -22,3 +22,5 @@ body:not(.signed-in) .app-shell{visibility:hidden;pointer-events:none}body.signe
 .button-danger{border:1px solid #e8c7bb;background:#fff;color:#ad604e}.button-danger:hover{border-color:#d9a293;background:#fff6f3}
 
 .date-time-grid.event-mode #dateField{grid-column:1/-1}
+
+.sidebar-encouragement{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:9px 10px;border:1px solid #f1efeb;background:#fff;border-radius:12px}.encouragement-mark{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:11px;background:#fff1e9;color:#c98460;font-size:16px}.encouragement-copy{display:grid;gap:3px;min-width:0}.encouragement-copy strong{font-size:11px;font-weight:700;color:var(--ink)}.encouragement-copy small{color:var(--muted);font-size:10px;line-height:1.45}
