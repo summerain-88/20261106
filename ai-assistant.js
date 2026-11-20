@@ -63,7 +63,9 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
   });
   const model = aiSdk.getGenerativeModel(ai, {
     model: MODEL_NAME,
-    systemInstruction: SYSTEM_INSTRUCTION
+    systemInstruction: SYSTEM_INSTRUCTION,
+    generationConfig: { maxOutputTokens: 512 },
+    requestOptions: { timeout: 60000 }
   });
 
   let chat = null;
@@ -77,9 +79,15 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
       }
 
       const prompt = `以下是目前登入者的行程與待辦資料摘要（JSON）：\n${buildContext(data, today, question)}\n\n使用者問題：${question}`;
-      const result = await chat.sendMessage(prompt);
-      turnCount += 1;
-      return result.response.text();
+      try {
+        const result = await chat.sendMessage(prompt);
+        turnCount += 1;
+        return result.response.text();
+      } catch (error) {
+        chat = null;
+        turnCount = 0;
+        throw error;
+      }
     },
     reset() {
       chat = null;
