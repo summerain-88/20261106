@@ -3,19 +3,80 @@
 const KEY='daily-routine-prototype-v1';
 const firebaseConfig={apiKey:'AIzaSyCIA99FbQZW0rAFNbJfIFk75jdsxYh6t0k',authDomain:'daily-routine-20261106.firebaseapp.com',projectId:'daily-routine-20261106',appId:'1:1094479252037:web:17e864af712a098467712c'};
 const firebaseConfigured=Object.values(firebaseConfig).every(v=>v&&!v.startsWith('YOUR_'));
-let firebaseAuth=null,authUser=null,authReady=false;
+// Add the public reCAPTCHA Enterprise site key after registering App Check in Firebase.
+const APP_CHECK_SITE_KEY='6LfEtSkuAAAAAMJMHtzAyDmjdhUXspvJsl8atzfI';
+let firebaseAuth=null,authUser=null,authReady=false,firebaseDb=null,firestoreSdk=null,cloudStore=null,firebaseAppCheck=null,scheduleAssistant=null;
 const showAuthError=msg=>{const el=document.querySelector('#authError');if(el)el.textContent=msg||''};
 const setAuthScreen=(signedIn,user=null)=>{document.body.classList.toggle('signed-in',signedIn);document.querySelectorAll('.app-shell').forEach(el=>{el.setAttribute('aria-hidden',String(!signedIn));el.inert=!signedIn;});document.querySelectorAll('.app-shell button:not(#signOutButton):not(#topSignOutButton),.app-shell input,.app-shell select,.app-shell textarea').forEach(el=>el.disabled=!signedIn);document.querySelectorAll('#signOutButton,#topSignOutButton').forEach(el=>el.disabled=!signedIn);document.querySelectorAll('.app-shell a').forEach(el=>el.setAttribute('aria-disabled',String(!signedIn)));authUser=user;authReady=true;document.querySelectorAll('[data-user-name]').forEach(el=>el.textContent=user?.displayName||user?.email||'使用者');document.querySelectorAll('[data-user-avatar]').forEach(el=>el.textContent=(user?.displayName||user?.email||'使').trim().slice(0,1));if(signedIn){const name=user?.displayName?.split(/\s+/)[0]||'朋友';document.querySelector('#greetingName').textContent=name;document.querySelector('#authStatus').textContent='已使用 Google 帳戶登入';}else document.querySelector('#authStatus').textContent='登入後可查看你的行程與待辦。'};
-const startFirebase=async()=>{const loginButton=document.querySelector('#googleSignIn');loginButton?.addEventListener('click',()=>{if(!firebaseAuth)showAuthError('Firebase 登入服務尚未就緒，請重新整理；若仍無法使用，請檢查網路或聯絡管理者。')});if(!firebaseConfigured){setAuthScreen(false);showAuthError('尚未完成 Firebase 設定。請依 README 設定 Firebase 專案資訊後重新整理。');return}try{const app=await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');const auth=await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');app.initializeApp(firebaseConfig);firebaseAuth=auth.getAuth();await auth.getRedirectResult(firebaseAuth);await new Promise(resolve=>auth.onAuthStateChanged(firebaseAuth,user=>{if(user){try{data=JSON.parse(localStorage.getItem(KEY+'-'+user.uid))||seed()}catch{data=seed()}}setAuthScreen(!!user,user);if(user)render();resolve()}));document.querySelector('#googleSignIn').addEventListener('click',async()=>{showAuthError('');try{const provider=new auth.GoogleAuthProvider();await auth.signInWithPopup(firebaseAuth,provider)}catch(error){showAuthError(error.code==='auth/unauthorized-domain'?'此網域尚未加入 Firebase 授權網域。':error.code==='auth/popup-blocked'?'請允許瀏覽器開啟登入彈出視窗後再試。':error.message||'登入失敗，請稍後再試。')}});document.querySelector('#signOutButton').addEventListener('click',()=>auth.signOut(firebaseAuth));document.querySelector('#topSignOutButton').addEventListener('click',()=>auth.signOut(firebaseAuth));}catch(error){setAuthScreen(false);const code=error?.code||'';showAuthError(code==='auth/unauthorized-domain'?'此網域尚未加入 Firebase 授權網域。':code==='auth/operation-not-allowed'?'Firebase 尚未啟用 Google 登入。':'Firebase 初始化失敗（'+(code||error?.message||'未知錯誤')+'），請重新整理或聯絡管理者。');console.error('Firebase auth initialization failed:',error)}};
+const startFirebase=async()=>{
+ const loginButton=document.querySelector('#googleSignIn');
+ if(!firebaseConfigured){setAuthScreen(false);showAuthError('尚未完成 Firebase 設定。請依 README 設定 Firebase 專案資訊後重新整理。');return}
+ try{
+  const [app,auth,fs,appCheck,aiSdk,storeModule,assistantModule]=await Promise.all([import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js'),import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js'),import('https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js'),import('./firestore-store.js'),import('./ai-assistant.js')]);
+  const firebaseApp=app.initializeApp(firebaseConfig);
+  const isLocalAppCheckDebug=['localhost','127.0.0.1'].includes(location.hostname)&&new URLSearchParams(location.search).get('appCheckDebug')==='1';
+  if(isLocalAppCheckDebug)self.FIREBASE_APPCHECK_DEBUG_TOKEN=true;
+  if(APP_CHECK_SITE_KEY){
+   try{
+    firebaseAppCheck=appCheck.initializeAppCheck(firebaseApp,{provider:new appCheck.ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),isTokenAutoRefreshEnabled:true});
+    scheduleAssistant=assistantModule.createScheduleAssistant(aiSdk,firebaseApp);
+   }catch(error){firebaseAppCheck=null;scheduleAssistant=null;console.error('App Check initialization failed:',error)}
+  }
+  firebaseAuth=auth.getAuth(firebaseApp);
+  firestoreSdk=fs;
+  firebaseDb=fs.getFirestore(firebaseApp);
+  await auth.getRedirectResult(firebaseAuth);
+  loginButton.addEventListener('click',async()=>{
+   showAuthError('');
+   try{
+    if(authUser){await auth.signOut(firebaseAuth);return}
+    const provider=new auth.GoogleAuthProvider();
+    await auth.signInWithPopup(firebaseAuth,provider);
+   }catch(error){showAuthError(error.code==='auth/unauthorized-domain'?'此網域尚未加入 Firebase 授權網域。':error.code==='auth/popup-blocked'?'請允許瀏覽器開啟登入彈出視窗後再試。':error.message||'登入失敗，請稍後再試。')}
+  });
+  const signOut=async()=>{if(cloudStore)await cloudStore.flush(data);await auth.signOut(firebaseAuth)};
+  document.querySelector('#signOutButton').addEventListener('click',signOut);
+  document.querySelector('#topSignOutButton').addEventListener('click',signOut);
+  let loadingUid=null;
+  auth.onAuthStateChanged(firebaseAuth,async user=>{
+   if(!user){loadingUid=null;cloudStore=null;scheduleAssistant?.reset();clearAssistantConversation();setAuthScreen(false);showAuthError('');loginButton.textContent='使用 Google 帳戶登入';return}
+   if(loadingUid===user.uid)return;
+   loadingUid=user.uid;
+   setAuthScreen(false,user);
+   showAuthError('正在載入你的 Firestore 資料…');
+   try{
+    data=await storeModule.loadUserData(fs,firebaseDb,user.uid,KEY+'-'+user.uid,DEFAULT,TODAY,seed);
+    cloudStore=storeModule.createUserDataStore(fs,firebaseDb,user.uid,data,error=>{
+     const message=error?.code==='permission-denied'?'Firestore 寫入遭拒，請先部署 firestore.rules。':'Firestore 寫入失敗（'+(error?.code||'未知錯誤')+'）。';
+     showAuthError(message);
+     if(authUser)toast(message+' 變更已暫存在此瀏覽器。');
+     console.error('Firestore write failed:',error);
+    });
+    setAuthScreen(true,user);
+    showAuthError('');
+    render();
+   }catch(error){
+    setAuthScreen(false,user);
+    loginButton.textContent='登出後重試';
+    showAuthError(error?.code==='permission-denied'?'Firestore 權限不足，請先部署 firestore.rules 後重新載入。':'Firestore 載入失敗（'+(error?.code||error?.message||'未知錯誤')+'）。請檢查網路與資料庫設定。');
+    console.error('Firestore data load failed:',error);
+   }finally{loadingUid=null}
+  });
+ }catch(error){
+  setAuthScreen(false);
+  const code=error?.code||'';
+  showAuthError(code==='auth/unauthorized-domain'?'此網域尚未加入 Firebase 授權網域。':code==='auth/operation-not-allowed'?'Firebase 尚未啟用 Google 登入。':'Firebase 初始化失敗（'+(code||error?.message||'未知錯誤')+'），請重新整理或聯絡管理者。');
+  console.error('Firebase initialization failed:',error);
+ }
+};
 const encouragementMessages=['一步一步，也是在前進。','今天的你，已經很努力了。','不必完美，開始就很棒。','每一點努力都算數。','先做好眼前這一步就好。','慢慢來，你有自己的節奏。','休息一下，也是前進的一部分。','小小進步，累積起來就是改變。','你比想像中更有能力。','今天也值得好好肯定自己。'];const encouragementMessage=document.querySelector('#encouragementMessage');if(encouragementMessage)encouragementMessage.textContent=encouragementMessages[Math.floor(Math.random()*encouragementMessages.length)];startFirebase();
 const COLORS={'個人':['#c57d59','#fff1e9','#e8a07c'],'工作':['#897ea6','#f0edf7','#a094b9'],'生活':['#76866b','#edf2eb','#8c9b80'],'健康':['#6e9290','#eaf3f0','#84aaa3'],'學習':['#bc8e51','#f8f1e6','#d4ac70']};
 const DEFAULT=['個人','工作','生活','健康','學習'],pad=n=>String(n).padStart(2,'0'),iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()),parse=s=>{let [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)},today=new Date();today.setHours(0,0,0,0);const TODAY=iso(today),off=n=>{let d=new Date(today);d.setDate(d.getDate()+n);return iso(d)},$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),style=c=>COLORS[c]||['#8e8178','#f2efec','#a69a91'],fmt=s=>new Intl.DateTimeFormat('zh-TW',{month:'long',day:'numeric'}).format(parse(s)),dayname=s=>new Intl.DateTimeFormat('zh-TW',{weekday:'long'}).format(parse(s)),monthname=d=>d.getFullYear()+' 年 '+(d.getMonth()+1)+' 月';
 function seed(){return {categories:[...DEFAULT],tasks:[{id:'t1',title:'完成下週簡報初稿',date:off(0),time:'09:00',category:'工作',priority:'high',notes:'先整理好簡報架構與重要數據。',completed:false},{id:'t2',title:'回覆設計團隊的提案',date:off(0),time:'11:30',category:'工作',priority:'normal',notes:'',completed:false},{id:'t3',title:'確認媽媽生日禮物',date:off(1),time:'15:00',category:'個人',priority:'high',notes:'看看之前收藏的那款茶具。',completed:false},{id:'t4',title:'整理陽台的植物',date:off(2),time:'',category:'生活',priority:'low',notes:'',completed:false},{id:'t5',title:'閱讀《原子習慣》',date:off(0),time:'20:30',category:'學習',priority:'normal',notes:'睡前讀 20 分鐘。',completed:true},{id:'t6',title:'午餐後散步 20 分鐘',date:off(0),time:'12:30',category:'健康',priority:'low',notes:'',completed:false},{id:'t7',title:'繳交本月水電費',date:off(-1),time:'',category:'生活',priority:'high',notes:'線上繳費',completed:false}],events:[{id:'e1',title:'晨間例會',date:off(0),time:'09:30',endTime:'10:00',category:'工作',location:'線上會議'},{id:'e2',title:'午餐時間',date:off(0),time:'12:00',endTime:'13:00',category:'生活',location:''},{id:'e3',title:'專案進度討論',date:off(0),time:'14:00',endTime:'15:00',category:'工作',location:'小會議室'},{id:'e4',title:'下班後瑜伽',date:off(0),time:'18:30',endTime:'19:30',category:'健康',location:'日光瑜伽教室'},{id:'e5',title:'和朋友喝咖啡',date:off(2),time:'15:00',endTime:'16:30',category:'個人',location:'巷口咖啡'},{id:'e6',title:'看牙醫',date:off(4),time:'10:30',endTime:'11:30',category:'健康',location:'安心牙醫診所'}]}}
 let data;try{data=seed();if(!data||!Array.isArray(data.tasks)||!Array.isArray(data.events)||!Array.isArray(data.categories))data=seed()}catch{data=seed()}
-let mini=new Date(today.getFullYear(),today.getMonth(),1),month=new Date(today.getFullYear(),today.getMonth(),1),selected=TODAY,filter='all',category='all',query='',toastTimer;const save=()=>{if(authUser)localStorage.setItem(KEY+'-'+authUser.uid,JSON.stringify(data))},toast=s=>{$('#toast').textContent=s;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2200)},eventTimeLabel=e=>e.time&&e.endTime?e.time+'-'+e.endTime:e.time?e.time+' 開始':e.endTime?e.endTime+' 結束':'全天',eventsSorted=a=>[...a].sort((x,y)=>(x.time||'99:99').localeCompare(y.time||'99:99'));
+let mini=new Date(today.getFullYear(),today.getMonth(),1),month=new Date(today.getFullYear(),today.getMonth(),1),selected=TODAY,filter='all',category='all',query='',toastTimer;const save=()=>{if(!authUser)return;try{localStorage.setItem(KEY+'-'+authUser.uid,JSON.stringify(data))}catch{}cloudStore?.save(data)},toast=s=>{$('#toast').textContent=s;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2200)},eventTimeLabel=e=>e.time&&e.endTime?e.time+'-'+e.endTime:e.time?e.time+' 開始':e.endTime?e.endTime+' 結束':'全天',eventsSorted=a=>[...a].sort((x,y)=>(x.time||'99:99').localeCompare(y.time||'99:99'));
 let reminderTimers=new Map(),notifiedReminders=new Set();
-function normalizeReminders(){let changed=false;for(const item of [...data.tasks,...data.events]){if(item.reminderMinutes===undefined){item.reminderMinutes=null;item.reminderMethod='in-app';changed=true}}if(changed&&authUser)localStorage.setItem(KEY+'-'+authUser.uid,JSON.stringify(data))}
-function reminderDue(item){if(item.reminderMinutes==null||!item.date||!item.time)return null;let [y,m,d]=item.date.split('-').map(Number),[h,min]=item.time.split(':').map(Number);return new Date(y,m-1,d,h,min).getTime()-Number(item.reminderMinutes)*60000}
+function normalizeReminders(){let changed=false;for(const item of [...data.tasks,...data.events]){if(item.reminderMinutes===undefined){item.reminderMinutes=null;item.reminderMethod='in-app';changed=true}}if(changed)save()}function reminderDue(item){if(item.reminderMinutes==null||!item.date||!item.time)return null;let [y,m,d]=item.date.split('-').map(Number),[h,min]=item.time.split(':').map(Number);return new Date(y,m-1,d,h,min).getTime()-Number(item.reminderMinutes)*60000}
 function fireReminder(item){if(notifiedReminders.has(item.id))return;notifiedReminders.add(item.id);if(item.reminderMethod==='notification'&&'Notification'in window&&Notification.permission==='granted'){new Notification('日常提醒：'+item.title,{body:(item.date+' '+item.time)+(item.notes?' · '+item.notes:'')})}else{toast('提醒：'+item.title+(item.time?' · '+item.time:''))}}
 function scheduleReminders(){for(const [id,timer] of reminderTimers){clearTimeout(timer);reminderTimers.delete(id)}for(const item of [...data.events,...data.tasks]){if(item.completed)continue;let due=reminderDue(item);if(due==null)continue;if(due<=Date.now()){if(due>Date.now()-60000)fireReminder(item);continue}if(due-Date.now()>2147480000)continue;if(item.reminderMethod==='notification'&&(!('Notification'in window)||Notification.permission!=='granted'))continue;let timer=setTimeout(()=>{fireReminder(item);reminderTimers.delete(item.id)},due-Date.now());reminderTimers.set(item.id,timer)}}
 function stats(){let open=data.tasks.filter(t=>!t.completed),overdue=open.filter(t=>t.date<TODAY).length,due=open.filter(t=>t.date===TODAY),done=data.tasks.filter(t=>t.date===TODAY&&t.completed),total=due.length+done.length,pct=total?Math.round(done.length/total*100):0;$('#statTaskValue').textContent=due.length;$('#statEventValue').textContent=data.events.filter(e=>e.date===TODAY).length;$('#statPercentValue').innerHTML=pct+'<span class="percent-sign">%</span>';$('#statPercentCaption').textContent=total?done.length+' 件已完成':'慢慢來也很好';$('#taskProgress').style.width=pct+'%';$('#taskProgressLabel').textContent=total?'完成 '+done.length+' 件，共 '+total+' 件':'今天剛開始，加油！';['taskCountBadge','allTasksCount','navTaskCount','filterAllCount','allFilterAllCount'].forEach(id=>$('#'+id).textContent=open.length);$('#navTodayCount').textContent=due.length;['filterOverdueCount','allFilterOverdueCount'].forEach(id=>$('#'+id).textContent=overdue)}
@@ -40,4 +101,13 @@ $('#addCategoryButton').onclick=openCategoryEditor;$('#addCategoryButtonMobile')
 $('#addCategoryForm').addEventListener('submit',e=>{e.preventDefault();let field=$('#newCategoryInput'),name=field.value.trim().slice(0,8);if(!name)return;if(data.categories.includes(name)){toast('這個分類已經存在');field.focus();return}data.categories.push(name);save();render();renderCategoryEditor();toast('已新增「'+name+'」分類')});
 $('#categoryEditorList').addEventListener('click',e=>{let button=e.target.closest('[data-delete-category]');if(!button)return;let index=Number(button.dataset.deleteCategory),name=data.categories[index];if(!name)return;data.categories.splice(index,1);[...data.tasks,...data.events].forEach(item=>{if(item.category===name)item.category=data.categories[0]||''});if(category===name)category='all';save();render();renderCategoryEditor();toast('已刪除分類「'+name+'」')});
 $('#closeCategoryEditor').onclick=()=>$('#categoryEditor').close();$('#doneCategoryEditor').onclick=()=>$('#categoryEditor').close();$('#categoryEditor').addEventListener('click',e=>{if(e.target.id==='categoryEditor')$('#categoryEditor').close()});;document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#searchInput').focus()}if(e.key==='Escape')document.querySelector('.task-menu')?.remove()});let initial=location.hash.slice(1);page(['overview','calendar','tasks'].includes(initial)?initial:'overview');
+function appendAssistantMessage(text,role){let message=document.createElement('div');message.className='ai-message '+(role==='user'?'ai-message-user':'ai-message-assistant');message.textContent=text;$('#aiAssistantMessages').append(message);let list=$('#aiAssistantMessages');list.scrollTop=list.scrollHeight;return message}
+function clearAssistantConversation(){let list=$('#aiAssistantMessages');if(!list)return;list.replaceChildren();appendAssistantMessage('嗨！我可以根據你目前的待辦和行程回答問題。想先知道什麼？','assistant');$('#aiAssistantStatus').textContent=''}
+const aiDialog=$('#aiAssistantDialog'),aiQuestion=$('#aiAssistantQuestion'),aiForm=$('#aiAssistantForm'),aiSend=$('#aiAssistantSend'),aiStatus=$('#aiAssistantStatus');
+function refreshAssistantAvailability(){let available=Boolean(authUser&&firebaseAppCheck&&scheduleAssistant);aiStatus.textContent=available?'':'AI 小幫手尚未啟用：請先完成 Firebase App Check 的 reCAPTCHA Enterprise 設定。你的問題目前不會送出。';aiQuestion.disabled=!available;aiSend.disabled=!available;$$('#aiAssistantSuggestions [data-ai-prompt]').forEach(button=>button.disabled=!available)}
+$('#aiAssistantLauncher').addEventListener('click',()=>{if(!authUser){showAuthError('請先使用 Google 登入。');return}refreshAssistantAvailability();aiDialog.showModal();if(!aiQuestion.disabled)aiQuestion.focus()});
+$('#aiAssistantClose').addEventListener('click',()=>aiDialog.close());
+aiDialog.addEventListener('click',event=>{if(event.target===aiDialog)aiDialog.close()});
+$('#aiAssistantSuggestions').addEventListener('click',event=>{let button=event.target.closest('[data-ai-prompt]');if(!button||aiQuestion.disabled)return;aiQuestion.value=button.dataset.aiPrompt;aiForm.requestSubmit()});
+aiForm.addEventListener('submit',async event=>{event.preventDefault();let question=aiQuestion.value.trim();if(!question||!authUser)return;if(!scheduleAssistant||!firebaseAppCheck){refreshAssistantAvailability();return}appendAssistantMessage(question,'user');aiQuestion.value='';aiQuestion.disabled=true;aiSend.disabled=true;aiStatus.textContent='正在整理你的行程…';let pending=appendAssistantMessage('思考中…','assistant');try{let answer=await scheduleAssistant.ask(question,data,TODAY);pending.textContent=answer||'目前沒有可用的回答。';aiStatus.textContent=''}catch(error){pending.remove();let detail=(error?.code||'')+' '+(error?.message||'');let message=/app.?check|permission-denied/i.test(detail)?'AI 請求未通過 App Check。請確認 reCAPTCHA Enterprise 網站金鑰已註冊並與此網站相符。':'目前無法取得 AI 回覆，請稍後再試。';appendAssistantMessage(message,'assistant');aiStatus.textContent=''}finally{refreshAssistantAvailability();if(!aiQuestion.disabled)aiQuestion.focus()}});
 })();
