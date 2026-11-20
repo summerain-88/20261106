@@ -30,7 +30,7 @@
 
 ## AI 小幫手（Firebase AI Logic）
 
-Firebase Console 已啟用 Gemini Developer API，AI 小幫手使用 Firebase AI Logic 的 Gemini 4 Hydrogen。提問時會送出登入者近期與未來的待辦／行程摘要。標題、日期、時間、分類和待辦狀態會用於一般回答；只有提問備註或地點時，才會附上相應欄位。聊天記錄只保留在目前頁面記憶體中，不會寫入 Firestore，也不會修改行程。Firebase JavaScript SDK 固定使用 13.4.0；AI 請求逾時設定為 60 秒，避免介面一直停留在思考狀態。每次更新 AI 程式時，也要更新 `index.html` 的 `app.js` 版本參數及 `app.js` 中 AI 模組的版本參數，讓瀏覽器載入新版。
+Firebase Console 已啟用 Gemini Developer API，AI 小幫手使用 Firebase AI Logic 的 Gemini 4 Hydrogen。提問時會送出登入者近期與未來的待辦／行程摘要。標題、日期、時間、分類和待辦狀態會用於一般回答；只有提問備註或地點時，才會附上相應欄位。聊天記錄只保留在目前頁面記憶體中，不會寫入 Firestore，也不會修改行程。Firebase JavaScript SDK 固定使用 13.4.0；AI 請求 SDK 逾時設為 60 秒，另有 65 秒的取消保護，避免介面無限停留在思考狀態。每次更新 AI 程式時，也要更新 `index.html` 的 `app.js` 版本參數及 `app.js` 中 AI 模組的版本參數，讓瀏覽器載入新版。
 
 Firebase AI Logic 已強制使用 App Check；「日常行程管理網站」已註冊 Fraud Defense（reCAPTCHA Enterprise），`app.js` 也已設定對應的公開網站金鑰。要在正式網站使用 AI 小幫手，請發布最新版靜態網站：
 

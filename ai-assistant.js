@@ -1,5 +1,6 @@
 const MODEL_NAME = 'gemini-4-hydrogen';
 const MAX_ITEMS = 120;
+const REQUEST_TIMEOUT_MS = 65000;
 
 const SYSTEM_INSTRUCTION = `你是「日常」行程與待辦小幫手，請用繁體中文、簡潔親切地回答。
 你只能根據使用者當次提供的資料摘要回答，不要假裝已連線 Google Calendar 或其他系統，也不要捏造行程、時間、備註或地點。
@@ -79,14 +80,29 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
       }
 
       const prompt = `以下是目前登入者的行程與待辦資料摘要（JSON）：\n${buildContext(data, today, question)}\n\n使用者問題：${question}`;
+      const controller = new AbortController();
+      let timeoutId;
       try {
-        const result = await chat.sendMessage(prompt);
+        const timeout = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            const error = new Error('AI request timed out after 65 seconds');
+            error.code = 'ai/request-timeout';
+            reject(error);
+            controller.abort();
+          }, REQUEST_TIMEOUT_MS);
+        });
+        const result = await Promise.race([
+          chat.sendMessage(prompt, { signal: controller.signal }),
+          timeout
+        ]);
         turnCount += 1;
         return result.response.text();
       } catch (error) {
         chat = null;
         turnCount = 0;
         throw error;
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
     reset() {
