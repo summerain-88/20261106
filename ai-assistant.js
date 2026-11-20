@@ -59,8 +59,7 @@ function buildContext(data, today, question) {
 
 export function createScheduleAssistant(aiSdk, firebaseApp) {
   const ai = aiSdk.getAI(firebaseApp, {
-    backend: new aiSdk.GoogleAIBackend(),
-    useLimitedUseAppCheckTokens: true
+    backend: new aiSdk.GoogleAIBackend()
   });
   const model = aiSdk.getGenerativeModel(ai, {
     model: MODEL_NAME,
