@@ -2,6 +2,7 @@ const MODEL_NAME = 'gemini-3.8-flash';
 const FALLBACK_MODEL_NAME = 'gemini-3.5-flash-lite';
 const MAX_ITEMS = 120;
 const REQUEST_TIMEOUT_MS = 45000;
+const MODEL_REQUEST_TIMEOUT_MS = 20000;
 
 const SYSTEM_INSTRUCTION = `你是「日常」行程與待辦小幫手，請用繁體中文、簡潔親切地回答。
 你只能根據使用者當次提供的資料摘要回答，不要假裝已連線 Google Calendar 或其他系統，也不要捏造行程、時間、備註或地點。
@@ -60,9 +61,40 @@ function buildContext(data, today, question) {
 
 function isTemporaryCapacityError(error) {
   const code = String(error?.code || '').toLowerCase();
+  const name = String(error?.name || '').toLowerCase();
   const message = String(error?.message || '').toLowerCase();
   return /overload|temporarily unavailable|service unavailable/.test(message)
+    || /timeout|timed out|deadline exceeded/.test(`${code} ${name} ${message}`)
     || /fetch-error|internal|unavailable|resource-exhausted|quota|429|\b503\b/.test(code);
+}
+
+async function sendMessageWithTimeout(chat, prompt, deadline) {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) {
+    const error = new Error(`AI request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`);
+    error.code = 'ai/request-timeout';
+    throw error;
+  }
+
+  const timeoutMs = Math.min(MODEL_REQUEST_TIMEOUT_MS, remainingMs);
+  const controller = new AbortController();
+  let timeoutId;
+  try {
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort();
+        const error = new Error(`AI model request timed out after ${Math.ceil(timeoutMs / 1000)} seconds`);
+        error.code = 'ai/request-timeout';
+        reject(error);
+      }, timeoutMs);
+    });
+    return await Promise.race([
+      chat.sendMessage(prompt, { signal: controller.signal }),
+      timeout
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function buildLocalScheduleAnswer(question, data, today) {
@@ -145,13 +177,13 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
     generationConfig: {
       maxOutputTokens: 2048
     },
-    requestOptions: { timeout: 20000 }
+    requestOptions: { timeout: MODEL_REQUEST_TIMEOUT_MS }
   });
   const fallbackModel = aiSdk.getGenerativeModel(ai, {
     model: FALLBACK_MODEL_NAME,
     systemInstruction: SYSTEM_INSTRUCTION,
     generationConfig: { maxOutputTokens: 2048 },
-    requestOptions: { timeout: 20000 }
+    requestOptions: { timeout: MODEL_REQUEST_TIMEOUT_MS }
   });
 
   let activeModel = model;
@@ -169,37 +201,22 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
       }
 
       const prompt = `以下是目前登入者的行程與待辦資料摘要（JSON）：\n${buildContext(data, today, question)}\n\n使用者問題：${question}`;
-      const controller = new AbortController();
-      let timeoutId;
+      const deadline = Date.now() + REQUEST_TIMEOUT_MS;
       try {
-        const timeout = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => {
-            const error = new Error('AI request timed out after 65 seconds');
-            error.code = 'ai/request-timeout';
-            reject(error);
-            controller.abort();
-          }, REQUEST_TIMEOUT_MS);
-        });
-        const request = (async () => {
-          try {
-            return await chat.sendMessage(prompt, { signal: controller.signal });
-          } catch (error) {
-            if (activeModel !== model || !isTemporaryCapacityError(error)) throw error;
+        let result;
+        try {
+          result = await sendMessageWithTimeout(chat, prompt, deadline);
+        } catch (error) {
+          if (activeModel !== model || !isTemporaryCapacityError(error)) throw error;
 
-            // Gemini Developer API capacity and per-model quotas can fluctuate.
-            // Retry once with the supported, high-volume Flash-Lite model.
-            const fallbackChat = fallbackModel.startChat();
-            const fallbackResult = await fallbackChat.sendMessage(prompt, { signal: controller.signal });
-            activeModel = fallbackModel;
-            chat = fallbackChat;
-            turnCount = 0;
-            return fallbackResult;
-          }
-        })();
-        const result = await Promise.race([
-          request,
-          timeout
-        ]);
+          // Gemini Developer API capacity and per-model timeouts can fluctuate.
+          // Retry once with a fresh request signal and the Flash-Lite model.
+          const fallbackChat = fallbackModel.startChat();
+          result = await sendMessageWithTimeout(fallbackChat, prompt, deadline);
+          activeModel = fallbackModel;
+          chat = fallbackChat;
+          turnCount = 0;
+        }
         const response = result.response;
         const answer = response.text().trim();
         if (!answer) {
@@ -220,8 +237,6 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
           if (localAnswer) return localAnswer;
         }
         throw error;
-      } finally {
-        clearTimeout(timeoutId);
       }
     },
     reset() {
