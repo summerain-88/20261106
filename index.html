@@ -8,7 +8,7 @@
   <title>日常 — 個人行程與任務管理</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css?v=ai-assistant-1">
-  <script src="app.js?v=ai-assistant-10" defer></script>
+  <script src="app.js?v=ai-assistant-11" defer></script>
 </head>
 <body>
   <section class="auth-screen" id="authScreen" aria-labelledby="authTitle"><div class="auth-card"><a class="brand auth-brand" href="#" aria-label="日常"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4.5" y="6" width="15" height="14" rx="3"/><path d="M8 4v4m8-4v4M5 10h14m-9 4 2 2 4-4"/></svg></span><span>日常<span class="brand-dot">.</span></span></a><span class="auth-eyebrow">YOUR PERSONAL SPACE</span><h1 id="authTitle">讓日常，從容一點。</h1><p id="authStatus">登入後可查看你的行程與待辦。</p><button class="button button-primary google-button" id="googleSignIn" type="button"><span class="google-g" aria-hidden="true">G</span>使用 Google 帳戶登入</button><p class="auth-error" id="authError" role="alert"></p><small class="auth-privacy">你的行程只會顯示在登入後的個人空間。</small></div></section>
@@ -55,7 +55,7 @@
       <dialog class="ai-assistant-dialog" id="aiAssistantDialog" aria-labelledby="aiAssistantTitle" aria-describedby="aiAssistantPrivacy">
         <section class="ai-assistant-panel">
           <header class="ai-assistant-header"><div class="ai-assistant-brand"><span class="ai-assistant-mark" aria-hidden="true">✦</span><div><strong id="aiAssistantTitle">AI 小幫手</strong><small>依照你的行程與待辦回答</small></div></div><button class="ai-close-button" id="aiAssistantClose" type="button" aria-label="關閉 AI 小幫手">×</button></header>
-          <p class="ai-assistant-privacy" id="aiAssistantPrivacy">提問時，回答所需的行程摘要會傳給 Google Gemini。聊天只留在目前頁面，不會存入 Firestore；不會自動修改行程。</p>
+          <p class="ai-assistant-privacy" id="aiAssistantPrivacy">今天行程、未完成待辦與近期行程等清單查詢會直接根據目前頁面資料整理；其他問題會將回答所需的行程摘要傳給 Google Gemini。聊天只留在目前頁面，不會存入 Firestore；不會自動修改行程。</p>
           <div class="ai-assistant-messages" id="aiAssistantMessages" aria-live="polite"><div class="ai-message ai-message-assistant">嗨！我可以根據你目前的待辦和行程回答問題。想先知道什麼？</div></div>
           <div class="ai-assistant-suggestions" id="aiAssistantSuggestions"><button type="button" data-ai-prompt="今天有哪些行程？">今天有哪些行程？</button><button type="button" data-ai-prompt="有哪些未完成的待辦？">有哪些未完成的待辦？</button><button type="button" data-ai-prompt="我最近的行程有哪些？">我最近的行程有哪些？</button></div>
           <p class="ai-assistant-status" id="aiAssistantStatus" role="status"></p>

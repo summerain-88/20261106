@@ -1,7 +1,7 @@
 const MODEL_NAME = 'gemini-3.8-flash';
 const FALLBACK_MODEL_NAME = 'gemini-3.5-flash-lite';
 const MAX_ITEMS = 120;
-const REQUEST_TIMEOUT_MS = 65000;
+const REQUEST_TIMEOUT_MS = 45000;
 
 const SYSTEM_INSTRUCTION = `你是「日常」行程與待辦小幫手，請用繁體中文、簡潔親切地回答。
 你只能根據使用者當次提供的資料摘要回答，不要假裝已連線 Google Calendar 或其他系統，也不要捏造行程、時間、備註或地點。
@@ -65,13 +65,16 @@ function isTemporaryCapacityError(error) {
     || /fetch-error|internal|unavailable|resource-exhausted|quota|429|\b503\b/.test(code);
 }
 
-function buildLocalFallbackAnswer(question, data, today) {
+function buildLocalScheduleAnswer(question, data, today) {
   const events = Array.isArray(data?.events) ? data.events : [];
   const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
   const isToday = /今天|今日/.test(question);
   const asksForTasks = /待辦|任務|事項/.test(question);
   const asksForEvents = /行程|行事|安排/.test(question);
-  const prefix = 'Gemini 暫時無法回應，我先根據目前記錄整理：\n\n';
+  const isListingQuestion = /有哪些|有什麼|列出|查看|告訴我/.test(question)
+    && !/建議|推薦|規劃|優先|可不可以|能不能|怎麼|如何|要不要/.test(question);
+  if (!isListingQuestion) return null;
+
   const formatTime = item => item.time
     ? `${item.time}${item.endTime ? `–${item.endTime}` : ''}`
     : '全天';
@@ -91,26 +94,26 @@ function buildLocalFallbackAnswer(question, data, today) {
 
   if (asksForTasks && isToday) {
     const todaysTasks = tasks.filter(item => item && item.date === today && item.completed !== true);
-    return prefix + (todaysTasks.length
+    return todaysTasks.length
       ? todaysTasks.map(formatTask).join('\n')
-      : '今天沒有待完成的待辦。');
+      : '今天沒有待完成的待辦。';
   }
 
   if (asksForTasks && /未完成|待完成|還沒|尚未|剩下/.test(question)) {
     const openTasks = tasks.filter(item => item && item.completed !== true)
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''))
       .slice(0, 20);
-    return prefix + (openTasks.length
+    return openTasks.length
       ? openTasks.map(formatTask).join('\n')
-      : '目前沒有未完成的待辦。');
+      : '目前沒有未完成的待辦。';
   }
 
   if (asksForEvents && isToday) {
     const todaysEvents = events.filter(item => item && item.date === today)
       .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-    return prefix + (todaysEvents.length
+    return todaysEvents.length
       ? todaysEvents.map(item => formatEvent(item)).join('\n')
-      : '今天目前沒有記錄行程。');
+      : '今天目前沒有記錄行程。';
   }
 
   if (asksForEvents && /最近|接下來|未來|這週|本週|下週/.test(question)) {
@@ -118,12 +121,17 @@ function buildLocalFallbackAnswer(question, data, today) {
     const upcomingEvents = events.filter(item => item && item.date >= today && item.date <= lastDate)
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''))
       .slice(0, 20);
-    return prefix + (upcomingEvents.length
+    return upcomingEvents.length
       ? upcomingEvents.map(item => formatEvent(item, true)).join('\n')
-      : '接下來 7 天沒有記錄行程。');
+      : '接下來 7 天沒有記錄行程。';
   }
 
   return null;
+}
+
+function buildLocalFallbackAnswer(question, data, today) {
+  const answer = buildLocalScheduleAnswer(question, data, today);
+  return answer ? `Gemini 暫時無法回應，我先根據目前記錄整理：\n\n${answer}` : null;
 }
 
 export function createScheduleAssistant(aiSdk, firebaseApp) {
@@ -137,13 +145,13 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
     generationConfig: {
       maxOutputTokens: 2048
     },
-    requestOptions: { timeout: 60000 }
+    requestOptions: { timeout: 20000 }
   });
   const fallbackModel = aiSdk.getGenerativeModel(ai, {
     model: FALLBACK_MODEL_NAME,
     systemInstruction: SYSTEM_INSTRUCTION,
     generationConfig: { maxOutputTokens: 2048 },
-    requestOptions: { timeout: 60000 }
+    requestOptions: { timeout: 20000 }
   });
 
   let activeModel = model;
@@ -152,6 +160,9 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
 
   return {
     async ask(question, data, today) {
+      const directAnswer = buildLocalScheduleAnswer(question, data, today);
+      if (directAnswer) return directAnswer;
+
       if (!chat || turnCount >= 8) {
         chat = activeModel.startChat();
         turnCount = 0;
