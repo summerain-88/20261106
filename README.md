@@ -30,7 +30,7 @@
 
 ## AI 小幫手（Firebase AI Logic）
 
-Firebase Console 已啟用 Gemini Developer API，AI 小幫手使用 Firebase AI Logic 的 Gemini 3.8 Flash；若模型暫時過載，會自動改用 Gemini 3.5 Flash-Lite 重試一次。提問時會送出登入者近期與未來的待辦／行程摘要。標題、日期、時間、分類和待辦狀態會用於一般回答；只有提問備註或地點時，才會附上相應欄位。聊天記錄只保留在目前頁面記憶體中，不會寫入 Firestore，也不會修改行程。Firebase JavaScript SDK 固定使用 13.4.0；AI Logic 使用短效 App Check token，以符合目前模型的要求。AI 請求 SDK 逾時設為 60 秒，另有 65 秒取消保護。若免費方案的每分鐘額度用完，畫面會顯示可重試時間；若模型仍過載，會提示稍後再試。每次更新 AI 程式時，也要更新 `index.html` 的 `app.js` 版本參數及 `app.js` 中 AI 模組的版本參數，讓瀏覽器載入新版。
+Firebase Console 已啟用 Gemini Developer API，AI 小幫手使用 Firebase AI Logic 的 Gemini 3.8 Flash；若模型暫時過載，會自動改用 Gemini 3.5 Flash-Lite 重試一次。提問時會送出登入者近期與未來的待辦／行程摘要。標題、日期、時間、分類和待辦狀態會用於一般回答；只有提問備註或地點時，才會附上相應欄位。聊天記錄只保留在目前頁面記憶體中，不會寫入 Firestore，也不會修改行程。Firebase JavaScript SDK 固定使用 13.4.0；AI Logic 使用短效 App Check token，以符合目前模型的要求。AI 請求 SDK 逾時設為 60 秒，另有 65 秒取消保護。Gemini 與備用模型都無法回應時，今天行程、未完成待辦及近期行程等可直接查詢的問題會改由本機資料整理；其他問題會保留重試提示。若免費方案的每分鐘額度用完，畫面會顯示可重試時間。每次更新 AI 程式時，也要更新 `index.html` 的 `app.js` 版本參數及 `app.js` 中 AI 模組的版本參數，讓瀏覽器載入新版。
 
 Firebase AI Logic 已強制使用 App Check；「日常行程管理網站」已註冊 Fraud Defense（reCAPTCHA Enterprise），`app.js` 也已設定對應的公開網站金鑰。要在正式網站使用 AI 小幫手，請發布最新版靜態網站：
 

@@ -65,6 +65,67 @@ function isTemporaryCapacityError(error) {
     || /fetch-error|internal|unavailable|resource-exhausted|quota|429|\b503\b/.test(code);
 }
 
+function buildLocalFallbackAnswer(question, data, today) {
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+  const isToday = /今天|今日/.test(question);
+  const asksForTasks = /待辦|任務|事項/.test(question);
+  const asksForEvents = /行程|行事|安排/.test(question);
+  const prefix = 'Gemini 暫時無法回應，我先根據目前記錄整理：\n\n';
+  const formatTime = item => item.time
+    ? `${item.time}${item.endTime ? `–${item.endTime}` : ''}`
+    : '全天';
+  const formatDate = date => date === today
+    ? '今天'
+    : `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
+  const formatEvent = (item, includeDate = false) => {
+    const date = includeDate ? `${formatDate(item.date)} ` : '';
+    const category = item.category ? `（${item.category}）` : '';
+    return `• ${date}${formatTime(item)}｜${String(item.title || '未命名行程')}${category}`;
+  };
+  const formatTask = item => {
+    const date = item.date ? `${formatDate(item.date)} ` : '';
+    const time = item.time ? `${item.time} ` : '';
+    return `• ${date}${time}${String(item.title || '未命名待辦')}`;
+  };
+
+  if (asksForTasks && isToday) {
+    const todaysTasks = tasks.filter(item => item && item.date === today && item.completed !== true);
+    return prefix + (todaysTasks.length
+      ? todaysTasks.map(formatTask).join('\n')
+      : '今天沒有待完成的待辦。');
+  }
+
+  if (asksForTasks && /未完成|待完成|還沒|尚未|剩下/.test(question)) {
+    const openTasks = tasks.filter(item => item && item.completed !== true)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''))
+      .slice(0, 20);
+    return prefix + (openTasks.length
+      ? openTasks.map(formatTask).join('\n')
+      : '目前沒有未完成的待辦。');
+  }
+
+  if (asksForEvents && isToday) {
+    const todaysEvents = events.filter(item => item && item.date === today)
+      .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    return prefix + (todaysEvents.length
+      ? todaysEvents.map(item => formatEvent(item)).join('\n')
+      : '今天目前沒有記錄行程。');
+  }
+
+  if (asksForEvents && /最近|接下來|未來|這週|本週|下週/.test(question)) {
+    const lastDate = offsetDate(today, 7);
+    const upcomingEvents = events.filter(item => item && item.date >= today && item.date <= lastDate)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''))
+      .slice(0, 20);
+    return prefix + (upcomingEvents.length
+      ? upcomingEvents.map(item => formatEvent(item, true)).join('\n')
+      : '接下來 7 天沒有記錄行程。');
+  }
+
+  return null;
+}
+
 export function createScheduleAssistant(aiSdk, firebaseApp) {
   const ai = aiSdk.getAI(firebaseApp, {
     backend: new aiSdk.GoogleAIBackend(),
@@ -143,6 +204,10 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
       } catch (error) {
         chat = null;
         turnCount = 0;
+        if (isTemporaryCapacityError(error)) {
+          const localAnswer = buildLocalFallbackAnswer(question, data, today);
+          if (localAnswer) return localAnswer;
+        }
         throw error;
       } finally {
         clearTimeout(timeoutId);

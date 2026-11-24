@@ -12,7 +12,7 @@ const startFirebase=async()=>{
  const loginButton=document.querySelector('#googleSignIn');
  if(!firebaseConfigured){setAuthScreen(false);showAuthError('尚未完成 Firebase 設定。請依 README 設定 Firebase 專案資訊後重新整理。');return}
  try{
-  const [app,auth,fs,appCheck,aiSdk,storeModule,assistantModule]=await Promise.all([import('https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-app-check.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-ai.js'),import('./firestore-store.js'),import('./ai-assistant.js?v=ai-assistant-9')]);
+  const [app,auth,fs,appCheck,aiSdk,storeModule,assistantModule]=await Promise.all([import('https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-app-check.js'),import('https://www.gstatic.com/firebasejs/13.4.0/firebase-ai.js'),import('./firestore-store.js'),import('./ai-assistant.js?v=ai-assistant-10')]);
   const firebaseApp=app.initializeApp(firebaseConfig);
   const isLocalAppCheckDebug=['localhost','127.0.0.1'].includes(location.hostname)&&new URLSearchParams(location.search).get('appCheckDebug')==='1';
   if(isLocalAppCheckDebug)self.FIREBASE_APPCHECK_DEBUG_TOKEN=true;
