@@ -1,4 +1,4 @@
-const MODEL_NAME = 'gemini-4-hydrogen';
+const MODEL_NAME = 'gemini-3.8-flash';
 const MAX_ITEMS = 120;
 const REQUEST_TIMEOUT_MS = 65000;
 
@@ -59,7 +59,8 @@ function buildContext(data, today, question) {
 
 export function createScheduleAssistant(aiSdk, firebaseApp) {
   const ai = aiSdk.getAI(firebaseApp, {
-    backend: new aiSdk.GoogleAIBackend()
+    backend: new aiSdk.GoogleAIBackend(),
+    useLimitedUseAppCheckTokens: true
   });
   const model = aiSdk.getGenerativeModel(ai, {
     model: MODEL_NAME,
