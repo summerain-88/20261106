@@ -62,7 +62,7 @@ function isTemporaryCapacityError(error) {
   const code = String(error?.code || '').toLowerCase();
   const message = String(error?.message || '').toLowerCase();
   return /overload|temporarily unavailable|service unavailable/.test(message)
-    || /internal|unavailable|resource-exhausted|quota|429|\b503\b/.test(code);
+    || /fetch-error|internal|unavailable|resource-exhausted|quota|429|\b503\b/.test(code);
 }
 
 export function createScheduleAssistant(aiSdk, firebaseApp) {
