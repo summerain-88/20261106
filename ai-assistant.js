@@ -1,4 +1,5 @@
 const MODEL_NAME = 'gemini-3.8-flash';
+const FALLBACK_MODEL_NAME = 'gemini-3.5-flash-lite';
 const MAX_ITEMS = 120;
 const REQUEST_TIMEOUT_MS = 65000;
 
@@ -57,6 +58,13 @@ function buildContext(data, today, question) {
   });
 }
 
+function isTemporaryCapacityError(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  return /overload|temporarily unavailable|service unavailable/.test(message)
+    || /internal|unavailable|resource-exhausted|quota|429|\b503\b/.test(code);
+}
+
 export function createScheduleAssistant(aiSdk, firebaseApp) {
   const ai = aiSdk.getAI(firebaseApp, {
     backend: new aiSdk.GoogleAIBackend(),
@@ -66,19 +74,25 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
     model: MODEL_NAME,
     systemInstruction: SYSTEM_INSTRUCTION,
     generationConfig: {
-      maxOutputTokens: 2048,
-      thinkingConfig: { thinkingLevel: aiSdk.ThinkingLevel.LOW }
+      maxOutputTokens: 2048
     },
     requestOptions: { timeout: 60000 }
   });
+  const fallbackModel = aiSdk.getGenerativeModel(ai, {
+    model: FALLBACK_MODEL_NAME,
+    systemInstruction: SYSTEM_INSTRUCTION,
+    generationConfig: { maxOutputTokens: 2048 },
+    requestOptions: { timeout: 60000 }
+  });
 
+  let activeModel = model;
   let chat = null;
   let turnCount = 0;
 
   return {
     async ask(question, data, today) {
       if (!chat || turnCount >= 8) {
-        chat = model.startChat();
+        chat = activeModel.startChat();
         turnCount = 0;
       }
 
@@ -94,8 +108,24 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
             controller.abort();
           }, REQUEST_TIMEOUT_MS);
         });
+        const request = (async () => {
+          try {
+            return await chat.sendMessage(prompt, { signal: controller.signal });
+          } catch (error) {
+            if (activeModel !== model || !isTemporaryCapacityError(error)) throw error;
+
+            // Gemini Developer API capacity and per-model quotas can fluctuate.
+            // Retry once with the supported, high-volume Flash-Lite model.
+            const fallbackChat = fallbackModel.startChat();
+            const fallbackResult = await fallbackChat.sendMessage(prompt, { signal: controller.signal });
+            activeModel = fallbackModel;
+            chat = fallbackChat;
+            turnCount = 0;
+            return fallbackResult;
+          }
+        })();
         const result = await Promise.race([
-          chat.sendMessage(prompt, { signal: controller.signal }),
+          request,
           timeout
         ]);
         const response = result.response;
@@ -119,6 +149,7 @@ export function createScheduleAssistant(aiSdk, firebaseApp) {
       }
     },
     reset() {
+      activeModel = model;
       chat = null;
       turnCount = 0;
     }
